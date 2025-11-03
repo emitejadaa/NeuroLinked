@@ -1,0 +1,6 @@
+# python/requirements.txt
+numpy>=1.23
+scipy
+mne
+torch            # en Apple Silicon quizá convenga instalar con pip específico de PyTorch
+requests
