@@ -10,12 +10,16 @@ import path from 'path';
 import fs from 'fs';
 import { v4 as uuid } from 'uuid';
 import { fileURLToPath } from 'url';
+import cors from 'cors';
+
+// Habilitar CORS para desarrollo local (front en otro puerto)
 
 // ===== Paths base
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+app.use(cors());
 
 // Servir archivos estáticos de uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

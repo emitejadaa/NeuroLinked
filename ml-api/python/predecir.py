@@ -171,72 +171,74 @@ def predict_one_edf(
     X = (X*1e3 if scale_to_mV else X).astype(np.float32)
     X = _ensure_T(X, T)
 
-    # === Gráfico de 32 canales ===
-    try:
-        data_plot = X[0, :n_channels, :]  # shape (C, T)
-        # Normalizar cada canal para que se vea bien y apilar con offset
-        data_norm = (data_plot - data_plot.mean(axis=1, keepdims=True))
-        std = data_plot.std(axis=1, keepdims=True)
-        std[std == 0] = 1.0
-        data_norm = data_norm / std
-        offsets = np.arange(n_channels)[::-1].reshape(-1, 1) * 3.0  # separación vertical
-        stacked = data_norm + offsets
-
-        # Crear figura
-        fig, ax = plt.subplots(figsize=(12, 8), dpi=120)
-        t = np.arange(stacked.shape[1]) / fs
-        ax.plot(t, stacked.T, linewidth=0.7)
-        ax.set_xlabel('Tiempo (s)')
-        ax.set_yticks(offsets.flatten())
-        ax.set_yticklabels([f'Ch {i+1}' for i in range(n_channels)][::-1])
-        ax.set_title('EEG - 32 canales (normalizados)')
-        ax.grid(True, alpha=0.3)
-
-        # Directorio de salida para plots (uploads/plots)
-        uploads_dir = os.path.dirname(os.path.dirname(edf_path))  # .../uploads
-        plots_dir = os.path.join(uploads_dir, 'plots')
-        os.makedirs(plots_dir, exist_ok=True)
-        # Nombre basado en el EDF
-        base_name = os.path.splitext(os.path.basename(edf_path))[0]
-        plot_path = os.path.join(plots_dir, f'{base_name}.png')
-
-        fig.tight_layout()
-        fig.savefig(plot_path)
-        plt.close(fig)
-    except Exception as _e:
-        plot_path = None
-
-    model = EEGModel(n_channels)
-    obj = torch.load(model_path, map_location="cpu")
-    if isinstance(obj, dict):
-        sd = obj.get("state_dict", obj)
-        model.load_state_dict({k.replace("model.","").replace("module.",""):v for k,v in sd.items()}, strict=False)
-    model.eval()
-
-    with torch.no_grad():
-        out = model(torch.from_numpy(X)).squeeze(-1).numpy()
-        prob = 1/(1+np.exp(-out))[0]
-        pred = classes[int(prob>threshold)]
-
+    # === Helpers for labels (moved up so plotting can use them) ===
     def _norm_label(txt):
         if not isinstance(txt, str): txt = str(txt)
-        for k,v in {"rest":["rest","t0","T0"],"left":["left","t1","T1"],"right":["right","t2","T2"]}.items():
-            if txt.lower() in [x.lower() for x in v]: return k
+        for k, v in {"rest": ["rest", "t0", "T0"], "left": ["left", "t1", "T1"], "right": ["right", "t2", "T2"]}.items():
+            if txt.lower() in [x.lower() for x in v]:
+                return k
         return None
 
     def label_from_edf(path):
         try:
-            raw = mne.io.read_raw_edf(path, preload=False, verbose="ERROR")
-            if raw.annotations and len(raw.annotations)>0:
-                lab = _norm_label(raw.annotations[0]["description"])
-                if lab: return lab
+            raw0 = mne.io.read_raw_edf(path, preload=False, verbose="ERROR")
+            if raw0.annotations and len(raw0.annotations) > 0:
+                lab = _norm_label(raw0.annotations[0]["description"])
+                if lab:
+                    return lab
         except Exception:
             pass
         m = re.search(r"(left|right|rest|t0|t1|t2)", os.path.basename(path), re.I)
         return _norm_label(m.group(1)) if m else None
 
+    # === Build model & predict BEFORE plotting (so we can put Pred in the title) ===
+    model = EEGModel(n_channels)
+    obj = torch.load(model_path, map_location="cpu")
+    if isinstance(obj, dict):
+        sd = obj.get("state_dict", obj)
+        model.load_state_dict({k.replace("model.", "").replace("module.", ""): v for k, v in sd.items()}, strict=False)
+    model.eval()
+
+    with torch.no_grad():
+        out = model(torch.from_numpy(X)).squeeze(-1).numpy()
+        prob = 1 / (1 + np.exp(-out))[0]
+        pred = classes[int(prob > threshold)]
+
+    # === Plot EXACTLY like the reference snippet ===
+    plot_path = None
+    try:
+        plt.figure()  # fresh figure with default size/style
+        # sample: take one epoch (first) and plot channels along columns
+        sample = X[0, :n_channels, :]  # (C, T)
+        # Title values
+        PREDICTED = pred
+        ACTUAL = label_from_edf(edf_path) or "?"
+
+        # Prepare output path
+        uploads_dir = os.path.dirname(os.path.dirname(edf_path))  # .../uploads
+        plots_dir = os.path.join(uploads_dir, "plots")
+        os.makedirs(plots_dir, exist_ok=True)
+        base_name = os.path.splitext(os.path.basename(edf_path))[0]
+        plot_path = os.path.join(plots_dir, f"{base_name}.png")
+
+        # Plot with the same API calls/order as the provided code
+        plt.plot(sample.T)
+        plt.title(
+            "Exemplar of epoched data, for electrode 0-63\\n"
+            f"Actual Label : {ACTUAL}\\n"
+            f"Predicted Label : {PREDICTED}"
+        )
+        plt.ylabel("V")
+        plt.xlabel("Epoched Sample")
+        # In headless mode we save instead of show
+        plt.savefig(plot_path)
+        plt.clf()
+        plt.close()
+    except Exception as _e:
+        plot_path = None
+
     gt = label_from_edf(edf_path)
-    hit = (pred==gt) if gt in classes else None
+    hit = (pred == gt) if gt in classes else None
 
     return {"file": edf_path, "prob": float(prob), "pred": pred, "gt": gt, "hit": hit, "X_shape": X.shape, "plot_path": plot_path}
 
