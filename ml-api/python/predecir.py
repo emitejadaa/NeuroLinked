@@ -193,6 +193,49 @@ def predict_one_edf(
 
     # === Build model & predict BEFORE plotting (so we can put Pred in the title) ===
     model = EEGModel(n_channels)
+
+    # ---- Captura de activaciones para graficar "neuronas que se prenden" ----
+    ACTIVS = {}
+
+    def _hook_save(name):
+        def _fn(module, inputs, output):
+            try:
+                # Guardamos en CPU y como numpy cuando sea posible
+                if isinstance(output, tuple):
+                    # Para MultiheadAttention: (attn_out, attn_weights)
+                    ACTIVS[name] = tuple(
+                        (o.detach().cpu().numpy() if hasattr(o, "detach") else o) for o in output
+                    )
+                else:
+                    ACTIVS[name] = output.detach().cpu().numpy() if hasattr(output, "detach") else output
+            except Exception:
+                ACTIVS[name] = output
+        return _fn
+
+    # Última capa de la pila conv (BatchNorm1d) -> feature map (B, C*2, T)
+    _ = model.conv[-1].register_forward_hook(_hook_save("conv_out"))
+
+    # Bloques Transformer (en la secuencia trans: [PositionalEncoding, Block1, Block2])
+    _ = model.trans[1].register_forward_hook(_hook_save("trans1_out"))
+    _ = model.trans[2].register_forward_hook(_hook_save("trans2_out"))
+
+    # Atención interna: registramos hook en los MultiheadAttention para captar pesos
+    _ = model.trans[1].attn.register_forward_hook(_hook_save("attn1_out_and_weights"))
+    _ = model.trans[2].attn.register_forward_hook(_hook_save("attn2_out_and_weights"))
+
+    # Antes de la MLP: queremos el vector (B, C*2) que entra a la primera Linear
+    def _mlp_in_hook(module, inputs, output):
+        # inputs es una tupla; tomamos el primer tensor
+        x0 = inputs[0]
+        ACTIVS["mlp_in"] = x0.detach().cpu().numpy() if hasattr(x0, "detach") else x0
+    _ = model.mlp[0].register_forward_hook(_mlp_in_hook)
+
+    # Activación de la capa oculta (salida de la ReLU)
+    _ = model.mlp[1].register_forward_hook(_hook_save("mlp_h"))
+
+    # Logit final (B, 1)
+    _ = model.mlp[-1].register_forward_hook(_hook_save("mlp_logits"))
+
     obj = torch.load(model_path, map_location="cpu")
     if isinstance(obj, dict):
         sd = obj.get("state_dict", obj)
@@ -204,8 +247,195 @@ def predict_one_edf(
         prob = 1 / (1 + np.exp(-out))[0]
         pred = classes[int(prob > threshold)]
 
+    # ---- Gráfico 2: Top activaciones de neuronas (entrada a la MLP) ----
+    activations_plot_path = None
+    activations_url = None
+    try:
+        mlp_in = ACTIVS.get("mlp_in", None)
+        if mlp_in is not None:
+            v = mlp_in[0]  # (C*2,)
+            # Top-K por magnitud
+            k = min(20, v.shape[-1])
+            idx = np.argsort(np.abs(v))[-k:][::-1]
+            top_vals = v[idx]
+            top_idx = idx
+
+            # === Preparar pesos/canales y top ocultas (requeridos por el grafo) ===
+            W1 = None
+            W2 = None
+            try:
+                W1 = model.mlp[0].weight.detach().cpu().numpy()  # (H, C*2)
+                W2 = model.mlp[-1].weight.detach().cpu().numpy() # (1, H)
+            except Exception:
+                pass
+
+            h = ACTIVS.get("mlp_h", None)  # salida de ReLU, shape (1, H)
+            if h is not None and hasattr(h, "shape"):
+                h_vec = np.asarray(h)[0]  # (H,)
+            else:
+                # Si no capturamos, estimamos como ReLU(W1 @ v)
+                Hsize = W1.shape[0] if W1 is not None else max(1, v.shape[-1]//2)
+                h_vec = np.maximum(0.0, (W1 @ v) if W1 is not None else np.zeros((Hsize,), dtype=float))
+
+            # Tamaños de subconjuntos para el dibujo
+            k_in = len(top_idx)                           # cantidad de inputs a mostrar (Top-K de mlp_in)
+            m_h = int(min(12, h_vec.shape[0]))           # hasta 12 neuronas ocultas
+            hid_idx = np.argsort(np.abs(h_vec))[-m_h:][::-1]
+            h_top = h_vec[hid_idx]
+
+            uploads_dir = os.path.dirname(os.path.dirname(edf_path))  # .../uploads
+            plots_dir = os.path.join(uploads_dir, "plots")
+            os.makedirs(plots_dir, exist_ok=True)
+            base_name = os.path.splitext(os.path.basename(edf_path))[0]
+            activations_plot_path = os.path.join(plots_dir, f"{base_name}_activations.png")
+
+            # --- Visualización tipo red por capas (Input -> Hidden -> Output) ---
+            # Estilo y helpers
+            import matplotlib as mpl
+
+            # Colormap y normalizadores
+            cmap = mpl.colormaps.get_cmap('viridis')
+            def _to_rgba01(x):
+                x = float(np.clip(x, 0.0, 1.0))
+                r, g, b, a = cmap(x)
+                return (r, g, b, 1.0)
+
+            # (el resto del código permanece igual)
+
+            # Layout: tres columnas X = {0,1,2}
+            x_in, x_h, x_out = 0.0, 1.0, 2.0
+            # Y distribuciones verticales
+            y_in = np.linspace(0.0, 1.0, k_in)
+            y_h  = np.linspace(0.0, 1.0, m_h)
+            y_out = np.array([0.7, 0.3])  # up=left, down=rest
+
+            # Normalizaciones para estilos (0..1)
+            def _norm01(arr):
+                arr = np.abs(np.asarray(arr).astype(float))
+                if arr.size == 0:
+                    return arr
+                a, b = float(arr.min()), float(arr.max())
+                rng = (b - a) if (b - a) > 1e-12 else 1.0
+                return (arr - a) / rng
+
+            in_strength = _norm01(top_vals)                  # para nodos de entrada
+            h_strength  = _norm01(h_top)                     # para nodos ocultos
+            # Contribución de input->hidden usando |w_ij * v_i|
+            if W1 is not None:
+                W1_sub = W1[hid_idx, :][:, top_idx]          # (m_h, k_in)
+                contrib_in_h = np.abs(W1_sub * top_vals[None, :])
+                contrib_in_h = contrib_in_h / (contrib_in_h.max() + 1e-9)
+            else:
+                contrib_in_h = np.zeros((m_h, k_in), dtype=float)
+
+            # Contribución de hidden->output usando |w2_j * h_j|
+            if W2 is not None:
+                w2 = W2[0, hid_idx]                          # (m_h,)
+                contrib_h_out = np.abs(w2 * h_top)
+                c_ho = contrib_h_out / (contrib_h_out.max() + 1e-9)
+            else:
+                c_ho = np.zeros((m_h,), dtype=float)
+
+            # --- Figura con estética clara y color por intensidad ---
+            fig = plt.figure(figsize=(9, 6))
+            ax = fig.add_subplot(111)
+            # Fondo oscuro para resaltar intensidades
+            fig.patch.set_facecolor('#0e1117')
+            ax.set_facecolor('#0e1117')
+            ax.set_axis_off()
+            ax.set_xlim(-0.25, 2.7)
+            ax.set_ylim(-0.1, 1.1)
+
+            # Sutilezas tipográficas en claro
+            title_color = '#e6edf3'
+            text_color  = '#e6edf3'
+            edge_color  = '#e6edf3'
+
+            # --- Dibujar conexiones Input -> Hidden con "glow" + color por contribución ---
+            for j in range(m_h):
+                for i in range(k_in):
+                    c = float(contrib_in_h[j, i])
+                    col = _to_rgba01(c)
+                    # Glow (trazo grueso translúcido)
+                    ax.plot([x_in, x_h], [y_in[i], y_h[j]], linewidth=3.8, alpha=0.08, color='w', zorder=1)
+                    # Trazo principal coloreado por contribución
+                    ax.plot([x_in, x_h], [y_in[i], y_h[j]], linewidth=1.6 + 2.2*c, alpha=0.8*c + 0.2, color=col, zorder=2)
+
+            # --- Dibujar conexiones Hidden -> Output con "glow" + color por contribución ---
+            for j in range(m_h):
+                c = float(c_ho[j])
+                col = _to_rgba01(c)
+                # H->Left
+                ax.plot([x_h, x_out], [y_h[j], y_out[0]], linewidth=4.4, alpha=0.08, color='w', zorder=1)
+                ax.plot([x_h, x_out], [y_h[j], y_out[0]], linewidth=1.8 + 2.6*c, alpha=0.85*c + 0.15, color=col, zorder=2)
+                # H->Rest (más tenue)
+                ax.plot([x_h, x_out], [y_h[j], y_out[1]], linewidth=3.2, alpha=0.05, color='w', zorder=1)
+                ax.plot([x_h, x_out], [y_h[j], y_out[1]], linewidth=1.2 + 1.8*c, alpha=0.6*c + 0.15, color=col, zorder=2)
+
+            # --- Nodos ---
+            # Tamaños escalan al cuadrado de la intensidad para más contraste
+            sizes_in = 60.0 + 500.0 * (in_strength ** 2)
+            sizes_h  = 70.0 + 520.0 * (h_strength ** 2)
+            # Colores por intensidad
+            cols_in = [ _to_rgba01(v) for v in in_strength ]
+            cols_h  = [ _to_rgba01(v) for v in h_strength ]
+
+            # Input nodes
+            ax.scatter(np.full(k_in, x_in), y_in, s=sizes_in, c=cols_in, edgecolors=edge_color, linewidths=0.6, zorder=3)
+            # Hidden nodes
+            ax.scatter(np.full(m_h, x_h),  y_h,  s=sizes_h,  c=cols_h,  edgecolors=edge_color, linewidths=0.6, zorder=3)
+
+            # Output nodes (dos) coloreados por probabilidad
+            p_left = float(prob); p_rest = float(1.0 - prob)
+            size_left = 220.0 + 520.0 * (p_left ** 2)
+            size_rest = 220.0 + 520.0 * (p_rest ** 2)
+            col_left = _to_rgba01(p_left)
+            col_rest = _to_rgba01(p_rest)
+
+            ax.scatter([x_out], [y_out[0]], s=size_left, c=[col_left], edgecolors=edge_color, linewidths=0.8, zorder=4)
+            ax.scatter([x_out], [y_out[1]], s=size_rest, c=[col_rest], edgecolors=edge_color, linewidths=0.8, zorder=4)
+
+            # Etiquetas de capas
+            ax.text(x_in, 1.055, "Input (Top-K)", ha='center', va='bottom', fontsize=10, color=text_color)
+            ax.text(x_h,  1.055, f"Hidden (m={m_h})", ha='center', va='bottom', fontsize=10, color=text_color)
+            ax.text(x_out,1.055, "Output (Prob)", ha='center', va='bottom', fontsize=10, color=text_color)
+
+            # Etiquetas de clases con sus probabilidades (más grandes y claras)
+            ax.text(x_out + 0.18, y_out[0], f"left: {p_left:.2f}", va='center', fontsize=12, weight='bold', color=text_color)
+            ax.text(x_out + 0.18, y_out[1], f"rest: {p_rest:.2f}", va='center', fontsize=12, weight='bold', color=text_color)
+
+            # Título con predicción
+            ax.set_title("Neuron graph — intensity = activation / contribution", color=title_color, fontsize=12, pad=10)
+
+            # Pequeña barra de referencia (colorbar manual) en la esquina inferior izquierda
+            # para indicar que más claro = mayor activación/contribución
+            cb_x0, cb_y0, cb_w, cb_h = -0.15, -0.06, 0.25, 0.035
+            for i_cb in range(200):
+                t_cb = i_cb / 199.0
+                ax.add_patch(plt.Rectangle((cb_x0 + cb_w * t_cb, cb_y0), cb_w / 200.0, cb_h,
+                                           facecolor=_to_rgba01(t_cb), edgecolor='none', zorder=0))
+            ax.text(cb_x0, cb_y0 + cb_h + 0.005, "low", fontsize=8, color=text_color, ha='left', va='bottom')
+            ax.text(cb_x0 + cb_w, cb_y0 + cb_h + 0.005, "high", fontsize=8, color=text_color, ha='right', va='bottom')
+
+            plt.tight_layout()
+            plt.savefig(activations_plot_path, dpi=240, facecolor=fig.get_facecolor(), edgecolor='none')
+            plt.clf(); plt.close()
+
+            # Construir URL relativa para el front (Express sirve /uploads como estático)
+            activations_url = None
+            try:
+                uploads_dir_abs = os.path.dirname(os.path.dirname(edf_path))  # .../uploads
+                rel_from_uploads = os.path.relpath(activations_plot_path, uploads_dir_abs).replace(os.sep, "/")
+                activations_url = f"/uploads/{rel_from_uploads}"
+            except Exception:
+                activations_url = None
+    except Exception:
+        activations_plot_path = None
+        activations_url = None
+
     # === Plot EXACTLY like the reference snippet ===
     plot_path = None
+    plot_url = None
     try:
         plt.figure()  # fresh figure with default size/style
         # sample: take one epoch (first) and plot channels along columns
@@ -234,13 +464,31 @@ def predict_one_edf(
         plt.savefig(plot_path)
         plt.clf()
         plt.close()
+        try:
+            uploads_dir_abs = os.path.dirname(os.path.dirname(edf_path))  # .../uploads
+            rel_from_uploads = os.path.relpath(plot_path, uploads_dir_abs).replace(os.sep, "/")
+            plot_url = f"/uploads/{rel_from_uploads}"
+        except Exception:
+            plot_url = None
     except Exception as _e:
         plot_path = None
+        plot_url = None
 
     gt = label_from_edf(edf_path)
     hit = (pred == gt) if gt in classes else None
 
-    return {"file": edf_path, "prob": float(prob), "pred": pred, "gt": gt, "hit": hit, "X_shape": X.shape, "plot_path": plot_path}
+    return {
+        "file": edf_path,
+        "prob": float(prob),
+        "pred": pred,
+        "gt": gt,
+        "hit": hit,
+        "X_shape": X.shape,
+        "plot_path": plot_path,
+        "plot_url": plot_url,
+        "activations_path": activations_plot_path,
+        "activations_url": activations_url,
+    }
 
 
 # ===============================
@@ -261,6 +509,7 @@ if __name__ == "__main__":
             f"Prob: {res.get('prob'):.4f}" if isinstance(res.get('prob'), (float, int)) else f"Prob: {res.get('prob')}",
             f"Hit: {res.get('hit')}",
             f"Forma X: {tuple(res.get('X_shape')) if res.get('X_shape') is not None else None}",
+            f"Activations plot: {res.get('activations_path')}",
         ]
 
     ap = argparse.ArgumentParser()
@@ -308,73 +557,21 @@ if __name__ == "__main__":
         "Hit": res.get("hit"),
         "Forma X": list(res.get("X_shape")) if res.get("X_shape") is not None else None,
         "plot_path": res.get("plot_path"),
+        "plot_url": res.get("plot_url"),
+        "activations_path": res.get("activations_path"),
+        "activations_url": res.get("activations_url"),
         "tuya_status": tuya_status,
     }
 
-    if args.json:
-        # JSON limpio para que Node lo parsee directo y lo devuelva al front
-        print(json.dumps(out_json))
-    else:
-        # 2) Texto humano (igual que antes) + status Tuya
-        print("")  # salto de línea como antes
+    # Emitimos SIEMPRE JSON a STDOUT (para el front)
+    sys.stdout.write(json.dumps(out_json))
+    sys.stdout.flush()
+
+    # Opcional: cuando no se pide --json, además mandamos resumen humano a STDERR para logging
+    if not args.json:
+        sys.stderr.write("\n")  # salto de línea
         for line in human_lines(res):
-            print(line)
+            sys.stderr.write(line + "\n")
         if tuya_status is not None:
-            print(f"Tuya: {tuya_status}")
-    import argparse
-    ap = argparse.ArgumentParser()
-    ap.add_argument("edf")
-    ap.add_argument("model", nargs="?", default="/Users/bensagra/Downloads/left_rest_model_20251022_142504.pt")
-    ap.add_argument("--no-tuya", action="store_true")
-    ap.add_argument("--json", action="store_true")
-    args = ap.parse_args()
-
-    EDF_PATH = args.edf
-    MODEL_PATH = args.model
-
-    res = predict_one_edf(EDF_PATH, MODEL_PATH)
-
-    if args.json:
-        print(json.dumps(res))  # JSON limpio para Node
-    else:
-        # tu salida original:
-        print(f"\nArchivo: {res['file']}")
-        print(f"GT: {res['gt']}")
-        print(f"Pred: {res['pred']}")
-        print(f"Prob: {res['prob']:.4f}")
-        print(f"Hit: {res['hit']}")
-        print(f"Forma X: {res['X_shape']}")
-
-    if not args.no_tuya:
-        tuya_switch(0 if res["pred"] == "rest" else 1)
-    if len(sys.argv) < 2:
-        print("Uso: python predecir.py <RUTA_LOCAL_DEL_EDF> [RUTA_LOCAL_DEL_MODELO_PT]")
-        sys.exit(1)
-
-    EDF_PATH = sys.argv[1]
-    if not os.path.exists(EDF_PATH):
-        print(f"Error: no existe el archivo local: {EDF_PATH}")
-        sys.exit(2)
-
-    # Path del modelo: usa el default si no se pasa por consola
-    MODEL_PATH = sys.argv[2] if len(sys.argv) >= 3 else "python/left_rest_model_20251022_142504.pt"
-    if not os.path.exists(MODEL_PATH):
-        print(f"Error: no existe el modelo: {MODEL_PATH}")
-        sys.exit(3)
-
-    # Ejecutar predicción
-    res = predict_one_edf(EDF_PATH, MODEL_PATH)
-
-    # Mostrar resultados
-    print(f"\nArchivo: {res['file']}")
-    print(f"GT: {res['gt']}")
-    print(f"Pred: {res['pred']}")
-    print(f"Prob: {res['prob']:.4f}")
-    print(f"Hit: {res['hit']}")
-    print(f"Forma X: {res['X_shape']}")
-
-    # Accionar Tuya según predicción (rest -> OFF, otro -> ON)
-    if res["pred"] == "rest":
-        tuya_switch(0)
-    else:
-        tuya_switch(1)
+            sys.stderr.write(f"Tuya: {tuya_status}\n")
+        sys.stderr.flush()

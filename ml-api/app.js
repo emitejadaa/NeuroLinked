@@ -11,6 +11,7 @@ import fs from 'fs';
 import { v4 as uuid } from 'uuid';
 import { fileURLToPath } from 'url';
 import cors from 'cors';
+// (opcional) para URLs absolutas
 
 // Habilitar CORS para desarrollo local (front en otro puerto)
 
@@ -94,6 +95,12 @@ app.post(
     }
 
     const PRED_SCRIPT = absOrResolve(process.env.PRED_SCRIPT) || path.join(__dirname, 'python/predecir.py');
+    try {
+      const st = fs.statSync(PRED_SCRIPT);
+      console.log('🧪 Script mtime:', st.mtime.toISOString(), 'size:', st.size);
+    } catch (e) {
+      console.log('🧪 Script stat error:', e?.message || e);
+    }
     if (!fs.existsSync(PRED_SCRIPT)) {
       fs.unlink(edfPath, () => {});
       return res.status(500).json({ ok: false, error: `No se encontró el script: ${PRED_SCRIPT}` });
@@ -111,8 +118,8 @@ app.post(
     let stderr = '';
 
     const py = spawn(PYTHON_BIN, args, {
-      cwd: __dirname,                // raíz del proyecto
-      env: { ...process.env },       // pasa CLIENT_ID, etc. al script
+      cwd: __dirname, // raíz del proyecto
+      env: { ...process.env, PYTHONUNBUFFERED: '1' }, // salida sin buffer
       stdio: ['ignore', 'pipe', 'pipe']
     });
 
@@ -131,7 +138,11 @@ app.post(
     });
 
     py.stdout.on('data', (d) => (stdout += d.toString()));
-    py.stderr.on('data', (d) => (stderr += d.toString()));
+    py.stderr.on('data', (d) => {
+      const chunk = d.toString();
+      stderr += chunk;
+      console.error('[py stderr]', chunk.trim());
+    });
 
     py.on('close', (code) => {
       clearTimeout(killTimer);
@@ -188,6 +199,20 @@ app.post(
               plot_url = `/uploads/${rel.replace(/\\/g, '/')}`;
             } catch (_) { /* noop */ }
           }
+          // Calcular activations_url si hay activations_path
+          const actPath = chosen.activations_path ?? chosen.activationsPath ?? null;
+          let activations_url = null;
+          if (actPath) {
+            try {
+              const relA = path.relative(uploadRoot, actPath);
+              activations_url = `/uploads/${relA.replace(/\\/g, '/')}`;
+            } catch (_) { /* noop */ }
+          }
+          // Opcional: URLs absolutas si PUBLIC_BASE_URL está presente
+          const BASE = process.env.PUBLIC_BASE_URL?.replace(/\/+$/, '') || '';
+          const abs_plot_url = plot_url ? `${BASE}${plot_url}` : null;
+          const abs_activations_url = activations_url ? `${BASE}${activations_url}` : null;
+
           const norm = {
             ok: true,
             file: chosen.file ?? chosen.Archivo ?? null,
@@ -199,6 +224,9 @@ app.post(
             hit: ('hit' in chosen) ? chosen.hit : (('Hit' in chosen) ? chosen.Hit : null),
             x_shape: chosen.X_shape ?? chosen['Forma X'] ?? chosen.x_shape ?? null,
             plot_url,
+            activations_url,
+            abs_plot_url,
+            abs_activations_url
           };
           return res.json(norm);
         }
