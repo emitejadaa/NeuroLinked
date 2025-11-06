@@ -11,9 +11,6 @@ import fs from 'fs';
 import { v4 as uuid } from 'uuid';
 import { fileURLToPath } from 'url';
 import cors from 'cors';
-// (opcional) para URLs absolutas
-
-// Habilitar CORS para desarrollo local (front en otro puerto)
 
 // ===== Paths base
 const __filename = fileURLToPath(import.meta.url);
@@ -22,8 +19,19 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(cors());
 
-// Servir archivos estáticos de uploads
+// Servir archivos estáticos
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/static', express.static(path.join(__dirname, 'static')));
+
+// Rutas para servir los HTML
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'static', 'landing.html'));
+});
+
+app.get('/upload', (req, res) => {
+  res.sendFile(path.join(__dirname, 'static', 'upload.html'));
+});
+
 const PORT = process.env.PORT || 3000;
 
 // ===== Uploads (/uploads/edf y /uploads/models)
@@ -41,6 +49,7 @@ const storage = multer.diskStorage({
     cb(null, `${uuid()}${ext}`);
   }
 });
+
 const upload = multer({ storage, limits: { fileSize: 200 * 1024 * 1024 } }); // 200MB
 
 // ===== Utils

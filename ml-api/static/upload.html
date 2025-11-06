@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>NeuroLinked · Predicción EEG</title>
+<style>
+  :root{
+    --bg:#000; --fg:#fff; --muted:#bfbfbf; --accent:#72bf44;
+    --card:#0b0b0b; --card2:#111; --border:#222;
+    --radius:14px; --shadow:0 8px 40px rgba(0,0,0,.6);
+  }
+  body::before{
+    content:""; position:fixed; inset:-20%; background:
+      radial-gradient(1200px 600px at 20% -10%, rgba(114,191,68,.08), transparent 60%),
+      radial-gradient(1000px 480px at 120% 120%, rgba(114,191,68,.06), transparent 60%);
+    pointer-events:none; z-index:-1;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--fg);
+    font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Inter,Ubuntu,"Helvetica Neue",Arial;
+    display:grid; place-items:center; padding:24px;
+  }
+  .shell{width:min(980px,100%); display:grid; gap:18px}
+
+  .brand{display:flex; gap:14px; align-items:center}
+  .brand h1{margin:0; font-size:22px}
+  .hint{color:var(--muted); font-size:13px}
+
+  .card{
+    background:linear-gradient(180deg,rgba(9,9,9,.9),rgba(14,14,14,.95));
+    border:1px solid rgba(114,191,68,.16);
+    border-radius:var(--radius);
+    padding:24px;
+    box-shadow:0 10px 50px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.02);
+    backdrop-filter: blur(6px);
+  }
+  .row{display:grid; gap:12px}
+  .two{grid-template-columns:1fr 1fr}
+  @media (max-width:800px){.two{grid-template-columns:1fr}}
+
+  /* Controles */
+  .pill{display:inline-block; border:1px solid #2b2b2b; border-radius:999px; padding:.3rem .6rem; color:var(--muted); font-size:12px}
+  .btn{user-select:none; display:inline-flex; align-items:center; justify-content:center; gap:8px;
+       padding:12px 16px; border-radius:12px; border:1px solid #2a2a2a; background:#151515;
+       font-weight:800; cursor:pointer; transition:.2s transform,.2s opacity,.25s box-shadow; text-decoration:none; color:#fff}
+  .btn:hover{transform:translateY(-1px); box-shadow:0 0 0 8px rgba(114,191,68,.2)}
+  .btn.primary{background:linear-gradient(180deg,#189a35,#0f6f27)}
+  .btn[aria-disabled="true"]{opacity:.4; cursor:not-allowed; box-shadow:none; transform:none}
+  .toolbar{display:flex; gap:10px; align-items:center; justify-content:flex-end}
+
+  /* Dropzone */
+  .drop{
+    border:1px dashed #333; border-radius:12px; padding:24px; text-align:center;
+    background:#0b0b0b; transition:.2s border-color,.2s background;
+  }
+  .drop.drag{border-color:var(--accent); background:#0f1a12}
+  .drop .title{font-weight:600}
+
+  /* Progreso */
+  .progress{height:8px; border-radius:999px; background:#171717; overflow:hidden; border:1px solid #222}
+  .bar{height:100%; width:0%; background:linear-gradient(90deg,var(--accent),#6df37a); transition:width .2s}
+
+  /* Resultados */
+  .preview{
+    display:grid; gap:10px; grid-template-columns: 2fr 3fr;
+  }
+  @media (max-width:900px){.preview{grid-template-columns:1fr}}
+  .imgbox{
+    border:1px solid rgba(114,191,68,.18);
+    border-radius:16px; overflow:hidden; background:#070707;
+    display:grid; place-items:center; min-height:280px; box-shadow:0 10px 40px rgba(0,0,0,.5);
+  }
+  .imgbox img{max-width:100%; height:auto; display:block}
+  .result-kpis{display:grid; grid-template-columns:repeat(2,1fr); gap:12px}
+  .kpi{
+    background:linear-gradient(180deg,#0d0d0d,#121212);
+    border:1px solid #1d1f1d;
+    border-radius:14px; padding:18px;
+  }
+  .kpi .label{color:#a8b5a8; font-size:12px; letter-spacing:.08em; text-transform:uppercase}
+  .kpi .value{font-size:clamp(22px,4vw,36px); font-weight:900; margin-top:6px}
+
+  .footer{color:#777; font-size:12px; text-align:center}
+
+  /* Toast */
+  .toast{
+    position:fixed; inset:auto 16px 16px auto; min-width:260px; max-width:88vw;
+    background:#121212; border:1px solid #2a2a2a; color:#fff; padding:12px 14px;
+    border-radius:12px; box-shadow:var(--shadow); opacity:0; transform:translateY(8px);
+    transition:.25s opacity,.25s transform; z-index:9999
+  }
+  .toast.show{opacity:1; transform:translateY(0)}
+  .toast.ok{border-color:#224d2d}
+  .toast.bad{border-color:#5c2323}
+</style>
+</head>
+<body>
+  <div class="shell">
+    <div class="brand">
+      <img src="logo.png" alt="Logo" width="56" height="56" style="border-radius:50%;background:#111" onerror="this.style.display='none'">
+      <div>
+        <h1>NeuroLinked · Predicción EEG</h1>
+        <div class="hint">Frontend minimal en HTML/CSS/JS — sin formularios, sin submit.</div>
+      </div>
+    </div>
+
+    <!-- Carga -->
+    <div class="card row">
+      <div class="row two">
+        <div class="row">
+          <div class="title">Archivo EDF</div>
+          <div class="drop" id="edfDrop">
+            <input id="edfInput" type="file" accept=".edf,.EDF" hidden />
+            <div class="title">Arrastrá tu <strong>.edf</strong> o hacé click</div>
+            <div class="hint" id="edfName">Ningún archivo seleccionado</div>
+          </div>
+        </div>
+
+        <div class="row">
+          <label class="hint" style="display:flex;align-items:center;gap:8px">
+            <input type="checkbox" id="useDefaultModel" checked style="width:18px;height:18px;accent-color:var(--accent)">
+            Usar <code>DEFAULT_MODEL</code> del backend
+          </label>
+          <div class="drop" id="modelDrop" data-disabled="true" style="opacity:.5; pointer-events:none">
+            <input id="modelInput" type="file" accept=".pt" hidden />
+            <div class="title">Subir modelo <strong>.pt</strong> (opcional)</div>
+            <div class="hint" id="modelName">Usando DEFAULT_MODEL</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="progress" aria-hidden="true"><div class="bar" id="bar"></div></div>
+        <div class="toolbar">
+          <span id="health" class="pill">Chequeando /health…</span>
+          <a class="btn" id="openFile">Elegir EDF</a>
+          <a class="btn secondary" id="clearBtn" aria-disabled="false">Limpiar</a>
+          <a class="btn primary" id="predictBtn" aria-disabled="true">Predecir</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Resultados -->
+    <div class="card row">
+      <div class="preview">
+        <div class="imgbox"><img id="plot" alt="Predicción · Gráfico EEG"/></div>
+        <div class="row">
+          <div class="result-kpis">
+            <div class="kpi"><div class="label">Predicción</div><div id="pred" class="value">—</div></div>
+            <div class="kpi"><div class="label">Probabilidad</div><div id="prob" class="value">—</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">© NeuroLinked — Si servís esto en otro host/puerto, activá CORS en el backend o usá un proxy.</div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* ================== CONFIG ================== */
+/* Si estás sirviendo el HTML en el mismo origen que la API, dejalo en "" */
+const BACKEND_URL = "http://localhost:3000"; // p.ej. "" o "http://localhost:3000"
+
+/* ================== HELPERS ================== */
+const $ = s => document.querySelector(s);
+const edfInput   = $('#edfInput');
+const edfDrop    = $('#edfDrop');
+const modelInput = $('#modelInput');
+const modelDrop  = $('#modelDrop');
+const useDefault = $('#useDefaultModel');
+const edfName    = $('#edfName');
+const modelName  = $('#modelName');
+const openFile   = $('#openFile');
+const predictBtn = $('#predictBtn');
+const clearBtn   = $('#clearBtn');
+const bar        = $('#bar');
+const healthPill = $('#health');
+
+const predEl = $('#pred'), probEl = $('#prob'), plotImg = $('#plot');
+
+function api(path){ return (BACKEND_URL || "") + path; }
+
+function toast(msg, ok=false){
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'toast ' + (ok ? 'ok' : 'bad');
+  requestAnimationFrame(()=> t.classList.add('show'));
+  setTimeout(()=> t.classList.remove('show'), 3500);
+}
+
+function setAriaDisabled(el, v){
+  el.setAttribute('aria-disabled', v ? 'true' : 'false');
+}
+function isDisabled(el){ return el.getAttribute('aria-disabled') === 'true'; }
+
+function setUploading(on){
+  const disPredict = on || !edfInput.files.length;
+  setAriaDisabled(predictBtn, disPredict);
+  setAriaDisabled(clearBtn, on);
+}
+
+function resetUI(){
+  edfInput.value = ''; modelInput.value = '';
+  edfName.textContent = 'Ningún archivo seleccionado';
+  modelName.textContent = useDefault.checked ? 'Usando DEFAULT_MODEL' : 'Ninguno';
+  bar.style.width = '0%';
+  plotImg.src = ''; plotImg.alt = 'Plot EEG';
+  [predEl, probEl].forEach(el => el.textContent = '—');
+}
+
+/* dropzone sin <label> ni <form> */
+function bindDrop(zone, input, nameEl){
+  ['dragenter','dragover'].forEach(ev =>
+    zone.addEventListener(ev, e=>{e.preventDefault(); e.stopPropagation(); zone.classList.add('drag');})
+  );
+  ['dragleave','drop'].forEach(ev =>
+    zone.addEventListener(ev, e=>{e.preventDefault(); e.stopPropagation(); zone.classList.remove('drag');})
+  );
+  zone.addEventListener('click', ()=>{
+    input.click(); // apertura única, sin label duplicando
+  });
+  zone.addEventListener('drop', e=>{
+    const f = e.dataTransfer.files?.[0];
+    if(f){ input.files = e.dataTransfer.files; nameEl.textContent = f.name; setAriaDisabled(predictBtn, !edfInput.files.length); }
+  });
+  input.addEventListener('change', ()=>{
+    const f = input.files?.[0];
+    nameEl.textContent = f ? f.name : 'Ninguno';
+    setAriaDisabled(predictBtn, !edfInput.files.length);
+  });
+}
+
+bindDrop(edfDrop, edfInput, edfName);
+bindDrop(modelDrop, modelInput, modelName);
+
+/* alternar uso de modelo */
+useDefault.addEventListener('change', ()=>{
+  const on = useDefault.checked;
+  modelDrop.style.opacity = on ? .5 : 1;
+  modelDrop.style.pointerEvents = on ? 'none' : 'auto';
+  modelDrop.dataset.disabled = on ? 'true' : 'false';
+  modelName.textContent = on ? 'Usando DEFAULT_MODEL' : (modelInput.files?.[0]?.name || 'Ninguno');
+});
+
+/* botones (no son <button>, no existe submit) */
+openFile.addEventListener('click', (e)=>{
+  e.preventDefault(); if(isDisabled(openFile)) return;
+  edfInput.click();
+});
+clearBtn.addEventListener('click', (e)=>{
+  e.preventDefault(); if(isDisabled(clearBtn)) return;
+  resetUI();
+});
+predictBtn.addEventListener('click', async (e)=>{
+  e.preventDefault(); if(isDisabled(predictBtn)) return;
+  if(!edfInput.files.length) return;
+
+  setUploading(true);
+  bar.style.width = '10%';
+
+  const fd = new FormData();
+  fd.append('file', edfInput.files[0]);
+  if(!useDefault.checked && modelInput.files.length){
+    fd.append('model', modelInput.files[0]);
+  }
+
+  try{
+    // Barra optimista de subida
+    const slowTick = setInterval(()=>{
+      const cur = parseFloat(bar.style.width) || 0;
+      if(cur < 90) bar.style.width = (cur + 1.2) + '%';
+    }, 120);
+
+    const r = await fetch(api('/predict'), { method:'POST', body: fd });
+    clearInterval(slowTick);
+    bar.style.width = '100%';
+
+    if(!r.ok){
+      toast('Error en /predict ('+r.status+')', false);
+      predEl.textContent = 'Error';
+      probEl.textContent = '—';
+      return;
+    }
+
+    const j = await r.json().catch(()=> ({}));
+    const get = (obj, ...keys) => { for (const k of keys){ if(obj && obj[k]!=null) return obj[k]; } };
+    const pred = get(j,'pred','Pred');
+    const prob = get(j,'prob','Prob','probability');
+
+    predEl.textContent = (pred!=null) ? String(pred) : '—';
+    probEl.textContent = (prob!=null) ? Number(prob).toFixed(3) : '—';
+
+    const plot = get(j,'plot_url','plotPath','plot_path');
+    if(plot){ plotImg.src = api(String(plot)); plotImg.alt = 'Predicción / Plot'; }
+    else { plotImg.removeAttribute('src'); }
+
+    toast('¡Predicción lista!', true);
+  }catch(err){
+    predEl.textContent = 'Error';
+    probEl.textContent = '—'
+    toast('Error de red al llamar /predict', false);
+  }finally{
+    setUploading(false);
+    setTimeout(()=> bar.style.width='0%', 1000);
+  }
+});
+
+/* Salud */
+(async function checkHealth(){
+  try{
+    const r = await fetch(api('/health'));
+    if(!r.ok) throw new Error(r.status);
+    const j = await r.json().catch(()=> ({}));
+    const ok = !!j.ok || r.ok;
+    healthPill.textContent = ok ? 'API OK' : 'API no OK';
+    healthPill.style.color = ok ? '#9cffb1' : '#ff7a7a';
+  }catch(e){
+    healthPill.textContent = 'API caída';
+    healthPill.style.color = '#ff7a7a';
+  }
+})();
+
+/* init */
+resetUI();
+</script>
+</body>
+</html>
