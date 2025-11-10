@@ -50,8 +50,22 @@ def tuya_switch(value: int | bool):
         "Content-Type": "application/json",
     }
 
-    resp = requests.post(f"{HOST}{path}", headers=headers, data=body_json, timeout=20)
-    print("💡 Tuya Status:", resp.status_code, resp.text)
+    try:
+        resp = requests.post(f"{HOST}{path}", headers=headers, data=body_json, timeout=20)
+        txt = resp.text
+        ok = resp.status_code in (200, 201)
+        parsed = None
+        try:
+            parsed = resp.json()
+            if isinstance(parsed, dict) and "success" in parsed:
+                ok = ok and bool(parsed.get("success"))
+        except Exception:
+            parsed = None
+        print("💡 Tuya Status:", resp.status_code, txt)
+        return ok, {"status_code": resp.status_code, "text": txt, "json": parsed}
+    except Exception as e:
+        print("💥 Tuya error:", e)
+        return False, {"error": str(e)}
 
 
 # ===============================
@@ -476,7 +490,7 @@ def predict_one_edf(
 
     gt = label_from_edf(edf_path)
     hit = (pred == gt) if gt in classes else None
-
+    
     return {
         "file": edf_path,
         "prob": float(prob),
@@ -540,11 +554,29 @@ if __name__ == "__main__":
     # Acción Tuya (opcional)
     tuya_status = None
     if not args.no_tuya:
-        try:
-            tuya_switch(0 if res["pred"] == "rest" else 1)
-            tuya_status = "sent"
-        except Exception as e:
-            tuya_status = f"error: {e}"
+        required_envs = {
+            "CLIENT_ID": CLIENT_ID,
+            "CLIENT_SECRET": CLIENT_SECRET,
+            "ACCESS_TOKEN": ACCESS_TOKEN,
+            "DEVICE_ID": DEVICE_ID,
+            "HOST": HOST,
+        }
+        missing = [k for k, v in required_envs.items() if not v]
+        if missing:
+            tuya_status = {"sent": False, "ok": False, "reason": f"missing env vars: {', '.join(missing)}"}
+            sys.stderr.write(f"Tuya skipped, missing env: {', '.join(missing)}\n")
+            sys.stderr.flush()
+        else:
+            try:
+                desired = 0 if res["pred"] == "rest" else 1
+                ok, info = tuya_switch(desired)
+                tuya_status = {"sent": True, "ok": bool(ok), "info": info, "desired": desired}
+                sys.stderr.write(f"Tuya sent -> ok={ok}, desired={desired}\n")
+                sys.stderr.flush()
+            except Exception as e:
+                tuya_status = {"sent": True, "ok": False, "error": str(e)}
+                sys.stderr.write(f"Tuya error: {e}\n")
+                sys.stderr.flush()
 
     # --- Salidas ---
     # 1) JSON (para el front) -> usa las claves con los mismos nombres "humanos"

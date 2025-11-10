@@ -121,7 +121,15 @@ app.post(
     console.log('🧪 EDF   :', edfPath);
     console.log('🧪 Model :', modelPath);
 
-    const args = [PRED_SCRIPT, edfPath, modelPath, '--json', '--no-tuya']; // --json para que predecir.py imprima JSON y --no-tuya para deshabilitar Tuya
+    // Control de Tuya: por defecto habilitado. Para deshabilitar, exportar DISABLE_TUYA=1 (o NO_TUYA=1).
+    const disableTuya = (process.env.DISABLE_TUYA === '1' || process.env.NO_TUYA === '1');
+    const args = [PRED_SCRIPT, edfPath, modelPath, '--json']; // --json para que predecir.py imprima JSON
+    if (disableTuya) {
+      console.log('🧪 Tuya disabled via env; calling script with --no-tuya');
+      args.push('--no-tuya');
+    } else {
+      console.log('🧪 Tuya enabled (script will be called without --no-tuya)');
+    }
 
     let stdout = '';
     let stderr = '';
