@@ -1,0 +1,860 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>NeuroLinked — Decodifica tu cerebro con IA</title>
+  <meta name="description" content="Plataforma de vanguardia para decodificación de señales EEG con IA. Predice, visualiza y automatiza con aprendizaje profundo.">
+  <link rel="icon" href="logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#000; --fg:#fff; --muted:#9ca3af; --accent:#72bf44; --accent-hover:#5da636;
+      --card:#0a0a0a; --card-hover:#0f0f0f; --border:#1a1a1a; --border-hover:#2a2a2a;
+      --ring:rgba(114,191,68,.25); --glow:rgba(114,191,68,.15);
+      --radius:20px; --shadow:0 25px 70px rgba(0,0,0,.5);
+      --gradient-primary:linear-gradient(135deg, #72bf44 0%, #5da636 100%);
+      --gradient-card:linear-gradient(180deg, rgba(10,10,10,.95) 0%, rgba(15,15,15,.98) 100%);
+    }
+    *{box-sizing:border-box; margin:0; padding:0}
+    html{scroll-behavior:smooth}
+    html,body{height:100%; overflow-x:hidden}
+    body{
+      margin:0; background:var(--bg); color:var(--fg);
+      font:16px/1.65 'Inter',system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,sans-serif;
+      -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+    }
+    a{color:#cfefff; text-decoration:none; transition:.25s}
+    .wrap{width:min(1280px,92%); margin:0 auto}
+    
+    /* ===== NAVIGATION ===== */
+    .nav{
+      position:fixed; inset:0 0 auto 0; height:80px; display:flex; align-items:center;
+      backdrop-filter:blur(16px) saturate(180%); 
+      background:linear-gradient(180deg, rgba(0,0,0,.85), rgba(0,0,0,.6));
+      border-bottom:1px solid rgba(255,255,255,.06); z-index:100;
+      transition:.3s transform;
+    }
+    .nav.hidden{transform:translateY(-100%)}
+    .nav .wrap{display:flex; align-items:center; justify-content:space-between}
+    .brand{display:flex; align-items:center; gap:14px; font-weight:800; font-size:20px; letter-spacing:-.02em}
+    .brand img{
+      width:48px; height:48px; border-radius:50%; background:#111;
+      box-shadow:0 0 0 3px rgba(114,191,68,.12), 0 4px 12px rgba(0,0,0,.4);
+      transition:.3s transform;
+    }
+    .brand:hover img{transform:rotate(5deg) scale(1.05)}
+    .nav-links{display:flex; gap:8px; align-items:center}
+    .nav a.btn{
+      padding:11px 18px; border-radius:12px; background:#0a0a0a;
+      border:1px solid var(--border); color:#fff; font-weight:700; font-size:14px;
+      transition:.2s all; cursor:pointer; letter-spacing:.01em;
+    }
+    .nav a.btn:hover{background:#121212; border-color:var(--border-hover); transform:translateY(-1px)}
+    .nav a.btn.primary{
+      background:var(--gradient-primary); border:none;
+      box-shadow:0 4px 16px rgba(114,191,68,.25), inset 0 1px 0 rgba(255,255,255,.15);
+    }
+    .nav a.btn.primary:hover{
+      box-shadow:0 6px 20px rgba(114,191,68,.35), inset 0 1px 0 rgba(255,255,255,.2);
+      transform:translateY(-2px);
+    }
+    
+    /* ===== HERO SECTION ===== */
+    .hero{
+      min-height:100svh; display:flex; align-items:center; justify-content:center;
+      position:relative; overflow:hidden; padding:120px 0 80px;
+    }
+    canvas#space{position:absolute; inset:0; z-index:0; opacity:.6}
+    .mesh-gradient{
+      position:absolute; inset:0; z-index:0; opacity:.4;
+      background:
+        radial-gradient(ellipse 80% 50% at 50% -10%, rgba(114,191,68,.25), transparent 70%),
+        radial-gradient(circle at 80% 80%, rgba(93,166,54,.15), transparent 60%);
+    }
+    .blob{
+      position:absolute; filter:blur(120px); opacity:.3; z-index:0; pointer-events:none;
+      animation:float 20s ease-in-out infinite;
+    }
+    .blob.b1{
+      width:600px; height:600px;
+      background:radial-gradient(circle, rgba(114,191,68,.4), transparent 65%);
+      top:-200px; left:-150px;
+    }
+    .blob.b2{
+      width:700px; height:700px;
+      background:radial-gradient(circle, rgba(89,255,155,.3), transparent 70%);
+      bottom:-250px; right:-200px; animation-delay:-10s;
+    }
+    @keyframes float{
+      0%,100%{transform:translate(0,0) scale(1)}
+      33%{transform:translate(30px,-20px) scale(1.05)}
+      66%{transform:translate(-20px,15px) scale(.95)}
+    }
+    
+    .hero .inner{position:relative; z-index:1; text-align:center; max-width:1100px; margin:0 auto}
+    .hero .logo{
+      width:120px; height:120px; border-radius:50%; display:block; margin:0 auto 24px;
+      background:linear-gradient(135deg, #0a0a0a, #151515);
+      box-shadow:
+        0 0 0 8px rgba(114,191,68,.08),
+        0 0 0 16px rgba(114,191,68,.04),
+        0 20px 50px rgba(0,0,0,.6);
+      animation:logoFloat 3s ease-in-out infinite;
+    }
+    @keyframes logoFloat{
+      0%,100%{transform:translateY(0)}
+      50%{transform:translateY(-8px)}
+    }
+    
+    .badge{
+      display:inline-flex; align-items:center; gap:8px;
+      border:1px solid rgba(114,191,68,.3); background:rgba(114,191,68,.08);
+      padding:.6rem 1.1rem; border-radius:999px; font-size:13px; font-weight:600;
+      color:#a8f08a; margin-bottom:20px; letter-spacing:.03em;
+      animation:fadeInUp .8s ease backwards;
+    }
+    .badge:before{
+      content:'●'; color:var(--accent); font-size:12px;
+      animation:pulse 2s ease infinite;
+    }
+    @keyframes pulse{
+      0%,100%{opacity:1}
+      50%{opacity:.4}
+    }
+    
+    .headline{
+      font-size:clamp(40px, 7vw, 78px); font-weight:900; line-height:1.08;
+      letter-spacing:-.03em; text-wrap:balance; margin:0 0 20px;
+      background:linear-gradient(135deg, #fff 0%, #d0d0d0 100%);
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+      background-clip:text; animation:fadeInUp 1s ease .2s backwards;
+    }
+    .headline em{
+      font-style:normal;
+      background:linear-gradient(135deg, var(--accent) 0%, #a8f08a 100%);
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+      background-clip:text;
+    }
+    
+    .sub{
+      color:#b4b4b4; font-size:clamp(17px, 2.5vw, 22px); max-width:800px;
+      margin:0 auto 32px; line-height:1.6; font-weight:400;
+      animation:fadeInUp 1s ease .4s backwards;
+    }
+    
+    @keyframes fadeInUp{
+      from{opacity:0; transform:translateY(20px)}
+      to{opacity:1; transform:translateY(0)}
+    }
+    
+    .ctas{
+      display:flex; justify-content:center; gap:14px; flex-wrap:wrap; margin:32px 0 48px;
+      animation:fadeInUp 1s ease .6s backwards;
+    }
+    
+    .btn{
+      appearance:none; border:none; border-radius:14px; padding:16px 32px;
+      font-weight:700; font-size:16px; cursor:pointer; letter-spacing:.01em;
+      transition:.25s all; position:relative; overflow:hidden;
+      font-family:inherit;
+    }
+    .btn:before{
+      content:''; position:absolute; inset:0; opacity:0;
+      background:linear-gradient(135deg, rgba(255,255,255,.1), transparent);
+      transition:.3s opacity;
+    }
+    .btn:hover:before{opacity:1}
+    .btn:active{transform:scale(.97)}
+    
+    .btn.secondary{
+      background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12);
+      color:#fff; backdrop-filter:blur(10px);
+    }
+    .btn.secondary:hover{
+      background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.2);
+      transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,.3);
+    }
+    
+    .btn.primary{
+      background:var(--gradient-primary); color:#fff; border:none;
+      box-shadow:
+        0 6px 20px rgba(114,191,68,.3),
+        inset 0 1px 0 rgba(255,255,255,.2),
+        inset 0 -1px 0 rgba(0,0,0,.2);
+    }
+    .btn.primary:hover{
+      box-shadow:
+        0 10px 30px rgba(114,191,68,.4),
+        inset 0 1px 0 rgba(255,255,255,.25);
+      transform:translateY(-3px);
+    }
+    
+    .marquee{
+      overflow:hidden; white-space:nowrap; margin-top:60px; opacity:.5;
+      mask-image:linear-gradient(90deg, transparent, black 15%, black 85%, transparent);
+    }
+    .marquee-content{
+      display:inline-block; padding:12px 0; color:#888; font-size:14px; font-weight:500;
+      animation:marquee 40s linear infinite;
+    }
+    @keyframes marquee{to{transform:translateX(-50%)}}
+    
+    /* ===== SECTIONS ===== */
+    section{
+      position:relative; padding:100px 0; border-top:1px solid rgba(255,255,255,.04);
+    }
+    section:nth-child(even){background:rgba(255,255,255,.01)}
+    
+    .section-header{
+      text-align:center; margin-bottom:60px;
+    }
+    .section-label{
+      display:inline-block; padding:.5rem 1rem; border-radius:999px;
+      background:rgba(114,191,68,.08); border:1px solid rgba(114,191,68,.2);
+      color:var(--accent); font-size:13px; font-weight:700; letter-spacing:.05em;
+      text-transform:uppercase; margin-bottom:16px;
+    }
+    .section-title{
+      font-size:clamp(32px, 5vw, 52px); font-weight:800; line-height:1.15;
+      letter-spacing:-.02em; margin:0 0 16px;
+    }
+    .section-desc{
+      color:var(--muted); font-size:18px; max-width:700px; margin:0 auto;
+    }
+    
+    /* ===== FEATURE GRID ===== */
+    .grid{
+      display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));
+      gap:24px;
+    }
+    
+    .card{
+      background:var(--gradient-card); border:1px solid var(--border);
+      border-radius:var(--radius); padding:32px; box-shadow:var(--shadow);
+      transform:translateY(20px); opacity:0; transition:.6s cubic-bezier(.16,1,.3,1);
+      position:relative; overflow:hidden;
+    }
+    .card:before{
+      content:''; position:absolute; top:0; left:0; right:0; height:1px;
+      background:linear-gradient(90deg, transparent, rgba(114,191,68,.4), transparent);
+      opacity:0; transition:.3s opacity;
+    }
+    .card:hover:before{opacity:1}
+    .card:hover{
+      border-color:var(--border-hover); transform:translateY(-4px);
+      box-shadow:0 30px 80px rgba(0,0,0,.7), 0 0 0 1px rgba(114,191,68,.1);
+    }
+    .card.show{transform:translateY(0); opacity:1}
+    
+    .card-icon{
+      width:56px; height:56px; border-radius:14px;
+      background:linear-gradient(135deg, rgba(114,191,68,.15), rgba(114,191,68,.05));
+      border:1px solid rgba(114,191,68,.2);
+      display:flex; align-items:center; justify-content:center;
+      font-size:28px; margin-bottom:20px;
+    }
+    
+    .card h3{
+      margin:0 0 12px; font-size:22px; font-weight:700; letter-spacing:-.01em;
+    }
+    .card p{
+      color:#b0b0b0; margin:0; line-height:1.7; font-size:15px;
+    }
+    .card code{
+      background:rgba(114,191,68,.1); padding:2px 6px; border-radius:4px;
+      color:var(--accent); font-size:13px; font-family:monospace;
+    }
+    
+    /* ===== USE CASES ===== */
+    .use-case{
+      background:var(--gradient-card); border:1px solid var(--border);
+      border-radius:var(--radius); padding:40px; display:flex; gap:32px;
+      align-items:center; margin-bottom:24px; transition:.3s all;
+    }
+    .use-case:hover{
+      border-color:var(--border-hover); transform:translateX(8px);
+      box-shadow:0 20px 60px rgba(0,0,0,.6);
+    }
+    .use-case-number{
+      flex-shrink:0; width:80px; height:80px; border-radius:50%;
+      background:linear-gradient(135deg, rgba(114,191,68,.2), rgba(114,191,68,.05));
+      border:2px solid rgba(114,191,68,.3);
+      display:flex; align-items:center; justify-content:center;
+      font-size:32px; font-weight:900; color:var(--accent);
+    }
+    .use-case-content h3{margin:0 0 8px; font-size:20px}
+    .use-case-content p{color:var(--muted); margin:0}
+    
+    /* ===== STATS ===== */
+    .stats-grid{
+      display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:20px;
+    }
+    .stat{
+      background:rgba(10,10,10,.8); border:1px solid var(--border);
+      border-radius:16px; padding:28px; text-align:center; transition:.3s all;
+      backdrop-filter:blur(10px);
+    }
+    .stat:hover{
+      border-color:var(--border-hover); transform:translateY(-4px);
+      box-shadow:0 12px 40px rgba(0,0,0,.5);
+    }
+    .stat-value{
+      font-size:40px; font-weight:900; color:var(--accent);
+      display:block; margin-bottom:8px; letter-spacing:-.02em;
+    }
+    .stat-label{
+      color:var(--muted); font-size:14px; font-weight:600; text-transform:uppercase;
+      letter-spacing:.05em;
+    }
+    
+    /* ===== CTA SECTION ===== */
+    .cta-section{
+      background:linear-gradient(135deg, rgba(114,191,68,.08), rgba(93,166,54,.05));
+      border:1px solid rgba(114,191,68,.2); border-radius:24px;
+      padding:60px 40px; text-align:center; margin:80px 0;
+      position:relative; overflow:hidden;
+    }
+    .cta-section:before{
+      content:''; position:absolute; inset:0; opacity:.1;
+      background:url('data:image/svg+xml,<svg width="60" height="60" xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1" fill="rgba(114,191,68,.3)"/></svg>');
+    }
+    .cta-section h2{
+      font-size:clamp(28px, 4vw, 42px); font-weight:800; margin:0 0 16px;
+    }
+    .cta-section p{
+      color:var(--muted); font-size:18px; margin:0 0 32px;
+    }
+    
+    /* ===== FOOTER ===== */
+    footer{
+      padding:60px 0; color:var(--muted); text-align:center;
+      border-top:1px solid rgba(255,255,255,.04);
+      background:linear-gradient(180deg, transparent, rgba(10,10,10,.5));
+    }
+    footer a{
+      color:var(--accent); transition:.2s color;
+    }
+    footer a:hover{color:var(--accent-hover)}
+    
+    /* ===== RESPONSIVE ===== */
+    @media (max-width:768px){
+      .nav{height:70px}
+      .nav .wrap{gap:12px}
+      .brand{font-size:18px; gap:10px}
+      .brand img{width:40px; height:40px}
+      .nav-links{gap:6px}
+      .nav a.btn{padding:9px 14px; font-size:13px}
+      .hero{padding:100px 0 60px}
+      .grid{grid-template-columns:1fr}
+      .use-case{flex-direction:column; text-align:center; padding:32px}
+      .stats-grid{grid-template-columns:1fr}
+      .cta-section{padding:40px 24px; margin:60px 0}
+    }
+    
+    /* ===== UTILITIES ===== */
+    .link{position:relative}
+    .link:after{
+      content:''; position:absolute; left:0; bottom:-2px; width:100%; height:2px;
+      background:currentColor; opacity:.4; transform:scaleX(0);
+      transform-origin:left; transition:.3s;
+    }
+    .link:hover:after{transform:scaleX(1)}
+  </style>
+</head>
+<body>
+  <!-- NAVIGATION -->
+  <nav class="nav" id="nav">
+    <div class="wrap">
+      <a href="#top" class="brand">
+        <img src="logo.png" alt="NeuroLinked Logo" onerror="this.style.display='none'">
+        <span>NeuroLinked</span>
+      </a>
+      <div class="nav-links">
+        <a href="#features" class="btn">Features</a>
+        <a href="#casos" class="btn">Casos de Uso</a>
+        <a href="upload.html" class="btn primary">Ir al Predictor →</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- HERO SECTION -->
+  <header class="hero" id="top">
+    <canvas id="space" aria-hidden="true"></canvas>
+    <div class="mesh-gradient"></div>
+    <div class="blob b1"></div>
+    <div class="blob b2"></div>
+    
+    <div class="inner wrap">
+      <img class="logo" src="logo.png" alt="NeuroLinked" onerror="this.style.display='none'">
+      
+      <div class="badge">
+        🧠 EEG + Deep Learning + IoT
+      </div>
+      
+      <h1 class="headline">
+        Decodifica tu <em>cerebro</em><br>con inteligencia artificial
+      </h1>
+      
+      <p class="sub">
+        Plataforma de vanguardia para analizar señales EEG con redes neuronales profundas. 
+        Carga archivos, obtén predicciones en tiempo real y conecta con dispositivos IoT.
+      </p>
+      
+      <div class="ctas">
+        <a class="btn primary" href="upload.html">Probar Ahora →</a>
+        <a class="btn secondary" href="#features">Ver Características</a>
+      </div>
+      
+      <div class="marquee">
+        <div class="marquee-content">
+          · Clasificación en tiempo real · Preprocesamiento avanzado MNE · Arquitecturas Transformer · 
+          Integración Tuya/IoT · Visualizaciones neuronales · API REST · Exportación JSON · 
+          Modelos customizables · Privacy-first ·
+          · Clasificación en tiempo real · Preprocesamiento avanzado MNE · Arquitecturas Transformer · 
+          Integración Tuya/IoT · Visualizaciones neuronales · API REST · Exportación JSON · 
+          Modelos customizables · Privacy-first ·
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- FEATURES SECTION -->
+  <section id="features">
+    <div class="wrap">
+      <div class="section-header">
+        <span class="section-label">Características</span>
+        <h2 class="section-title">Todo lo que necesitás en un solo lugar</h2>
+        <p class="section-desc">
+          Pipeline completo de procesamiento de EEG con las últimas tecnologías en Deep Learning
+        </p>
+      </div>
+      
+      <div class="grid">
+        <article class="card">
+          <div class="card-icon">🧠</div>
+          <h3>Deep Learning Avanzado</h3>
+          <p>
+            Arquitecturas state-of-the-art: EEGNet, Conv-RNN y Transformers optimizados para señales EEG. 
+            Aceleración automática con GPU (CUDA/MPS).
+          </p>
+        </article>
+        
+        <article class="card">
+          <div class="card-icon">⚡</div>
+          <h3>Rendimiento Extremo</h3>
+          <p>
+            Predicciones en 0.2-2 segundos. Modo <code>--no-plots</code> para máxima velocidad. 
+            Carga optimizada de modelos con <code>weights_only=True</code>.
+          </p>
+        </article>
+        
+        <article class="card">
+          <div class="card-icon">📊</div>
+          <h3>Preprocesamiento Robusto</h3>
+          <p>
+            Pipeline MNE completo: filtros paso-banda, notch, resampling, normalización por canal. 
+            Estandarización automática de datos.
+          </p>
+        </article>
+        
+        <article class="card">
+          <div class="card-icon">🎨</div>
+          <h3>Visualizaciones Neuronales</h3>
+          <p>
+            Gráficos de señales EEG, mapas de activación de neuronas, contribuciones por capa. 
+            Plots generados automáticamente y servidos via URL.
+          </p>
+        </article>
+        
+        <article class="card">
+          <div class="card-icon">🔌</div>
+          <h3>Integración IoT</h3>
+          <p>
+            Conectá automáticamente con dispositivos Tuya/Smart Home. 
+            Activá luces, cerraduras y escenas basándote en la predicción del modelo.
+          </p>
+        </article>
+        
+        <article class="card">
+          <div class="card-icon">🔒</div>
+          <h3>Privacy-First</h3>
+          <p>
+            Ejecución 100% local o en tu nube privada. Los archivos EDF se procesan y eliminan inmediatamente. 
+            Sin almacenamiento de datos sensibles.
+          </p>
+        </article>
+        
+        <article class="card">
+          <div class="card-icon">🚀</div>
+          <h3>API REST Completa</h3>
+          <p>
+            Endpoint <code>/predict</code> con multipart/form-data. Respuestas JSON normalizadas con 
+            <code>prob</code>, <code>pred</code>, <code>gt</code>, <code>plot_url</code>.
+          </p>
+        </article>
+        
+        <article class="card">
+          <div class="card-icon">🔧</div>
+          <h3>Totalmente Extensible</h3>
+          <p>
+            Entrená tus propios modelos, cambiale el <code>DEFAULT_MODEL</code> sin tocar código. 
+            Soporta PyTorch, Lightning, DataParallel.
+          </p>
+        </article>
+        
+        <article class="card">
+          <div class="card-icon">📱</div>
+          <h3>Responsive & Modern</h3>
+          <p>
+            Interfaz optimizada para desktop, tablet y mobile. 
+            Upload drag-and-drop, progress tracking, visualización responsive.
+          </p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- USE CASES SECTION -->
+  <section id="casos">
+    <div class="wrap">
+      <div class="section-header">
+        <span class="section-label">Casos de Uso</span>
+        <h2 class="section-title">Aplicaciones del mundo real</h2>
+        <p class="section-desc">
+          Descubrí cómo NeuroLinked transforma la investigación y aplicaciones BCI
+        </p>
+      </div>
+      
+      <div class="use-case">
+        <div class="use-case-number">1</div>
+        <div class="use-case-content">
+          <h3>🏥 Investigación Clínica</h3>
+          <p>
+            Clasificación automática de estados cerebrales (rest/left/right) para estudios de Motor Imagery. 
+            Exportá resultados en JSON para análisis estadístico downstream.
+          </p>
+        </div>
+      </div>
+      
+      <div class="use-case">
+        <div class="use-case-number">2</div>
+        <div class="use-case-content">
+          <h3>🏠 Smart Home Accesible</h3>
+          <p>
+            Controlá luces, cerraduras y dispositivos IoT mediante comandos mentales. 
+            Integración directa con Tuya para personas con movilidad reducida.
+          </p>
+        </div>
+      </div>
+      
+      <div class="use-case">
+        <div class="use-case-number">3</div>
+        <div class="use-case-content">
+          <h3>🎮 Brain-Computer Interfaces</h3>
+          <p>
+            Desarrollá aplicaciones BCI custom. API lista para integrar con Unity, Unreal, o cualquier stack. 
+            Latencia ultra-baja con modo <code>--no-plots</code>.
+          </p>
+        </div>
+      </div>
+      
+      <div class="use-case">
+        <div class="use-case-number">4</div>
+        <div class="use-case-content">
+          <h3>🧪 Prototipado Rápido</h3>
+          <p>
+            Validá hipótesis de ML en minutos. Subí tus datos EDF, probá diferentes modelos, 
+            visualizá activaciones neuronales sin escribir código.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STATS SECTION -->
+  <section>
+    <div class="wrap">
+      <div class="section-header">
+        <span class="section-label">Rendimiento</span>
+        <h2 class="section-title">Números que importan</h2>
+      </div>
+      
+      <div class="stats-grid">
+        <div class="stat">
+          <span class="stat-value">0.2s</span>
+          <span class="stat-label">Predicción (GPU + no-plots)</span>
+        </div>
+        <div class="stat">
+          <span class="stat-value">200MB</span>
+          <span class="stat-label">Límite por archivo EDF</span>
+        </div>
+        <div class="stat">
+          <span class="stat-value">120s</span>
+          <span class="stat-label">Timeout seguro</span>
+        </div>
+        <div class="stat">
+          <span class="stat-value">100%</span>
+          <span class="stat-label">Privacy local</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA SECTION -->
+  <section>
+    <div class="wrap">
+      <div class="cta-section">
+        <h2>¿Listo para decodificar señales cerebrales?</h2>
+        <p>
+          Empezá a usar NeuroLinked ahora mismo. Sin instalación, sin configuración compleja.
+        </p>
+        <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap">
+          <a class="btn primary" href="upload.html">Probar el Predictor →</a>
+          <a class="btn secondary" href="#top">Volver Arriba</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="wrap">
+      <p style="margin-bottom:12px;font-size:16px">
+        <strong>NeuroLinked</strong> — Decodificación de EEG con Deep Learning
+      </p>
+      <p style="color:#666;font-size:14px">
+        Hecho con 💚 para la comunidad BCI · 
+        <a href="upload.html" class="link">Ir al Predictor</a> · 
+        <a href="#top" class="link">Volver Arriba</a>
+      </p>
+      <p style="margin-top:24px;font-size:13px;color:#555">
+        © 2025 NeuroLinked. Todos los derechos reservados.
+      </p>
+    </div>
+  </footer>
+
+  <script>
+    /* ===== Intersection Observer for Card Animations ===== */
+    const observerOptions = {
+      threshold: 0.1,
+      rootMargin: '0px 0px -50px 0px'
+    };
+    
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry, index) => {
+        if (entry.isIntersecting) {
+          setTimeout(() => {
+            entry.target.classList.add('show');
+          }, index * 80);
+          observer.unobserve(entry.target);
+        }
+      });
+    }, observerOptions);
+    
+    document.querySelectorAll('.card, .use-case, .stat').forEach(el => observer.observe(el));
+
+    /* ===== Navbar Hide on Scroll Down ===== */
+    let lastScroll = 0;
+    const nav = document.getElementById('nav');
+    
+    window.addEventListener('scroll', () => {
+      const currentScroll = window.pageYOffset;
+      
+      if (currentScroll <= 80) {
+        nav.classList.remove('hidden');
+      } else if (currentScroll > lastScroll && currentScroll > 100) {
+        nav.classList.add('hidden');
+      } else if (currentScroll < lastScroll) {
+        nav.classList.remove('hidden');
+      }
+      
+      lastScroll = currentScroll;
+    });
+
+    /* ===== Smooth Scroll for Internal Links ===== */
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function(e) {
+        const href = this.getAttribute('href');
+        if (href === '#') return;
+        
+        const target = document.querySelector(href);
+        if (target) {
+          e.preventDefault();
+          const offsetTop = target.offsetTop - 80;
+          window.scrollTo({
+            top: offsetTop,
+            behavior: 'smooth'
+          });
+        }
+      });
+    });
+
+    /* ===== Particle Background Animation (Canvas) ===== */
+    const canvas = document.getElementById('space');
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+    let animationFrameId;
+    
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    
+    function resize() {
+      canvas.width = window.innerWidth * dpr;
+      canvas.height = window.innerHeight * dpr;
+      canvas.style.width = window.innerWidth + 'px';
+      canvas.style.height = window.innerHeight + 'px';
+      ctx.scale(dpr, dpr);
+      initParticles();
+    }
+    
+    function random(min, max) {
+      return min + Math.random() * (max - min);
+    }
+    
+    function initParticles() {
+      particles = [];
+      const particleCount = Math.floor((window.innerWidth * window.innerHeight) / 15000);
+      
+      for (let i = 0; i < particleCount; i++) {
+        particles.push({
+          x: random(0, window.innerWidth),
+          y: random(0, window.innerHeight),
+          vx: random(-0.15, 0.15),
+          vy: random(-0.15, 0.15),
+          radius: random(1, 2.5)
+        });
+      }
+    }
+    
+    function animate() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw gradient glow
+      const gradient = ctx.createRadialGradient(
+        window.innerWidth * 0.5,
+        window.innerHeight * 0.25,
+        0,
+        window.innerWidth * 0.5,
+        window.innerHeight * 0.25,
+        window.innerWidth * 0.7
+      );
+      gradient.addColorStop(0, 'rgba(114, 191, 68, 0.08)');
+      gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+      
+      // Update and draw particles
+      ctx.globalCompositeOperation = 'lighter';
+      
+      particles.forEach(particle => {
+        particle.x += particle.vx;
+        particle.y += particle.vy;
+        
+        // Bounce off edges
+        if (particle.x < 0 || particle.x > window.innerWidth) particle.vx *= -1;
+        if (particle.y < 0 || particle.y > window.innerHeight) particle.vy *= -1;
+        
+        // Draw particle
+        ctx.beginPath();
+        ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(160, 255, 190, 0.4)';
+        ctx.fill();
+      });
+      
+      // Draw connections
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          if (distance < 150) {
+            ctx.strokeStyle = `rgba(114, 191, 68, ${0.15 * (1 - distance / 150)})`;
+            ctx.lineWidth = 0.8;
+            ctx.beginPath();
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.stroke();
+          }
+        }
+      }
+      
+      ctx.globalCompositeOperation = 'source-over';
+      animationFrameId = requestAnimationFrame(animate);
+    }
+    
+    // Initialize
+    window.addEventListener('resize', resize);
+    resize();
+    animate();
+    
+    // Pause animation when tab is not visible
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        cancelAnimationFrame(animationFrameId);
+      } else {
+        animate();
+      }
+    });
+
+    /* ===== Add Hover Effects to Cards ===== */
+    document.querySelectorAll('.card').forEach(card => {
+      card.addEventListener('mouseenter', function() {
+        this.style.setProperty('--glow-opacity', '0.2');
+      });
+      
+      card.addEventListener('mouseleave', function() {
+        this.style.setProperty('--glow-opacity', '0');
+      });
+    });
+
+    /* ===== Parallax Effect on Hero ===== */
+    window.addEventListener('scroll', () => {
+      const scrolled = window.pageYOffset;
+      const heroInner = document.querySelector('.hero .inner');
+      const blobs = document.querySelectorAll('.blob');
+      
+      if (heroInner && scrolled < window.innerHeight) {
+        heroInner.style.transform = `translateY(${scrolled * 0.3}px)`;
+        heroInner.style.opacity = 1 - (scrolled / window.innerHeight) * 0.5;
+      }
+      
+      blobs.forEach((blob, index) => {
+        const speed = index === 0 ? 0.15 : 0.25;
+        blob.style.transform = `translate(${scrolled * speed}px, ${scrolled * -speed}px)`;
+      });
+    });
+
+    /* ===== Performance Optimization: Debounce Scroll ===== */
+    function debounce(func, wait) {
+      let timeout;
+      return function executedFunction(...args) {
+        const later = () => {
+          clearTimeout(timeout);
+          func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+      };
+    }
+
+    /* ===== Add Loading State for CTAs ===== */
+    document.querySelectorAll('a[href="upload"]').forEach(link => {
+      link.addEventListener('click', function(e) {
+        if (!this.classList.contains('loading')) {
+          this.classList.add('loading');
+          this.style.opacity = '0.7';
+          this.style.pointerEvents = 'none';
+        }
+      });
+    });
+
+    /* ===== Console Easter Egg ===== */
+    console.log('%c🧠 NeuroLinked', 'font-size:24px;font-weight:bold;color:#72bf44;');
+    console.log('%cInteresado en el código? Revisá el repo!', 'font-size:14px;color:#999;');
+    console.log('%c⚡ Optimizado para rendimiento extremo', 'font-size:12px;color:#72bf44;');
+  </script>
+</body>
+</html>

@@ -3,27 +3,45 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>NeuroLinked · Predicción EEG</title>
+<title>NeuroLinked · Predictor EEG</title>
+<link rel="icon" href="logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#000; --fg:#fff; --muted:#bfbfbf; --accent:#72bf44;
-    --card:#0b0b0b; --card2:#111; --border:#222;
-    --radius:14px; --shadow:0 8px 40px rgba(0,0,0,.6);
+    --bg:#000; --fg:#fff; --muted:#9ca3af; --accent:#72bf44; --accent-hover:#5da636;
+    --card:#0a0a0a; --border:#1a1a1a; --border-hover:#2a2a2a;
+    --radius:20px; --shadow:0 25px 70px rgba(0,0,0,.5);
+    --gradient-primary:linear-gradient(135deg, #72bf44 0%, #5da636 100%);
   }
-  body::before{
-    content:""; position:fixed; inset:-20%; background:
-      radial-gradient(1200px 600px at 20% -10%, rgba(114,191,68,.08), transparent 60%),
-      radial-gradient(1000px 480px at 120% 120%, rgba(114,191,68,.06), transparent 60%);
-    pointer-events:none; z-index:-1;
+  
+  *{box-sizing:border-box; margin:0; padding:0}
+  
+  html,body{
+    height:100%; overflow-x:hidden;
+    font:16px/1.65 'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;
   }
-  *{box-sizing:border-box}
-  html,body{height:100%}
+  
   body{
-    margin:0; background:var(--bg); color:var(--fg);
-    font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Inter,Ubuntu,"Helvetica Neue",Arial;
-    display:grid; place-items:center; padding:24px;
+    background:var(--bg); color:var(--fg);
+    display:flex; flex-direction:column; min-height:100vh;
+    position:relative;
   }
-  .shell{width:min(980px,100%); display:grid; gap:18px}
+  
+  body::before{
+    content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
+    background:
+      radial-gradient(ellipse 120% 60% at 50% -10%, rgba(114,191,68,.12), transparent 70%),
+      radial-gradient(circle at 80% 90%, rgba(93,166,54,.08), transparent 60%);
+    opacity:.6;
+  }
+  
+  .container{
+    max-width:1400px; width:92%; margin:0 auto; padding:40px 0;
+    position:relative; z-index:1; flex:1;
+  }
 
   .brand{display:flex; gap:14px; align-items:center}
   .brand h1{margin:0; font-size:22px}

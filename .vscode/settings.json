@@ -1,5 +1,5 @@
 {
   "liveServer.settings.port": 5500,
-  "liveServer.settings.root": "/frontend",
+  "liveServer.settings.root": "/static",
   "liveServer.settings.wait": 200
 }
