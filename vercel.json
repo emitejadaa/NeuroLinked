@@ -1,8 +1,9 @@
 {
   "version": 2,
+  "buildCommand": "npm install",
   "builds": [
     {
-      "src": "package.json",
+      "src": "ml-api/app.js",
       "use": "@vercel/node"
     }
   ],
