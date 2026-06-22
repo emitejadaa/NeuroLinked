@@ -1,0 +1,18 @@
+node_modules
+.git
+.gitignore
+.vscode
+.DS_Store
+notebooks/
+test_determinism.py
+validate_preprocessing.py
+static/upload.html
+static/landing.html
+.env.example
+README.md
+
+# Pero SÍ incluir:
+# !ml-api/static/
+# !ml-api/python/
+# !ml-api/python/predecir.py
+# !ml-api/python/*.pt

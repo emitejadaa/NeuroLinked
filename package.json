@@ -1,0 +1,28 @@
+{
+  "name": "neurolinked",
+  "version": "1.0.0",
+  "description": "Plataforma de decodificación de señales EEG con IA",
+  "main": "ml-api/app.js",
+  "type": "module",
+  "scripts": {
+    "start": "node ml-api/app.js",
+    "dev": "nodemon ml-api/app.js"
+  },
+  "engines": {
+    "node": "18.x"
+  },
+  "keywords": ["eeg", "ai", "neural"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "child_process": "^1.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "multer": "^2.0.2",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
