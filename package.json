@@ -9,7 +9,7 @@
     "dev": "nodemon ml-api/app.js"
   },
   "engines": {
-    "node": "18.x"
+    "node": "24.x"
   },
   "keywords": ["eeg", "ai", "neural"],
   "author": "",
