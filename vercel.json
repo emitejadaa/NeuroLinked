@@ -1,7 +1,7 @@
 {
   "framework": null,
   "installCommand": "echo skip install",
-  "buildCommand": "pwd && ls -la && mkdir -p public && cp index.html public/index.html && cp static/logo.png public/logo.png",
+  "buildCommand": "mkdir -p public && cp index.html public/index.html && cp static/logo.png public/logo.png",
   "outputDirectory": "public",
   "cleanUrls": true
 }
