@@ -1,17 +1,7 @@
 {
-  "version": 2,
-  "buildCommand": "npm install",
-  "builds": [
-    {
-      "src": "ml-api/app.js",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/ml-api/app.js"
-    }
-  ]
+  "framework": null,
+  "installCommand": "echo skip install",
+  "buildCommand": "S=.; [ -f index.html ] || S=..; mkdir -p public && cp $S/index.html public/index.html && cp $S/static/logo.png public/logo.png",
+  "outputDirectory": "public",
+  "cleanUrls": true
 }
-
